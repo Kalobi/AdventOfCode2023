@@ -1,56 +1,76 @@
-import regex
+from dataclasses import dataclass
 from functools import reduce
-from itertools import product
-from collections import Counter
+from itertools import repeat
+from operator import or_
+from typing import Iterable, Pattern
+
+import regex
 
 re_number = regex.compile(r"\d+")
 re_symbol = regex.compile(r"[^.\d]")
+re_gear = regex.compile(r"\*")
 
 
-def parse_line(line, index):
+class Number:
+    def __init__(self, value: int, first_column: int, last_column: int, row: int):
+        self.value = value
+        self.coords = frozenset(zip(range(first_column, last_column), repeat(row)))
+
+    def __eq__(self, other: "Number"):
+        return self.coords == other.coords
+
+    def __hash__(self):
+        return hash(self.coords)
+
+
+@dataclass(frozen=True)
+class Symbol:
+    column: int
+    row: int
+
+    @property
+    def coord(self):
+        return self.column, self.row
+
+
+@dataclass
+class ParsedGrid:
+    numbers: set[Number]
+    symbols: set[Symbol]
+
+    def __or__(self, other: "ParsedGrid"):
+        return ParsedGrid(self.numbers | other.numbers, self.symbols | other.symbols)
+
+
+def is_adjacent(number: Number, symbol: Symbol) -> bool:
+    return any(abs(symbol.column - coord[0]) <= 1 and abs(symbol.row - coord[1]) <= 1 for coord in number.coords)
+
+
+def parse_line(line: str, row_number: int, symbol_regex: Pattern[str]) -> ParsedGrid:
     line = line.strip()
-    number_positions = {
-        ((match.start() - 1, match.end() + 1), index): int(match.group())
-        for match in regex.finditer(re_number, line)
-    }
-    symbol_positions = {(match.start(), index) for match in regex.finditer(re_symbol, line)}
-    return number_positions, symbol_positions
+    return ParsedGrid({Number(int(match.group()), match.start(), match.end(), row_number)
+                       for match in regex.finditer(re_number, line)},
+                      {Symbol(match.start(), row_number)
+                       for match in regex.finditer(symbol_regex, line)})
 
 
-def parse_grid(grid):
-    return reduce(lambda data, new: (data[0] | new[0], data[1] | new[1]),
-                  (parse_line(line, index) for index, line in enumerate(grid)),
-                  ({}, set()))
+def parse_grid(grid: Iterable[str], symbol_regex: Pattern[str]) -> ParsedGrid:
+    return reduce(or_,
+                  (parse_line(line, row_number, symbol_regex)
+                   for row_number, line in enumerate(grid)),
+                  ParsedGrid(set(), set()))
 
 
-def part_numbers(data):
-    return [number for pos_range, number in data[0].items()
-            if any(pos in data[1]
-                   for pos in product(range(*pos_range[0]),
-                                      range(pos_range[1] - 1, pos_range[1] + 2)))]
+def part_numbers(raw_grid: Iterable[str]) -> list[Number]:
+    grid = parse_grid(raw_grid, re_symbol)
+    return [number for number in grid.numbers
+            if any(is_adjacent(number, symbol) for symbol in grid.symbols)]
 
 
-def part_witnesses(data):
-    witnesses = []
-    for pos_range, number in data[0].items():
-        for pos in product(range(*pos_range[0]),
-                           range(pos_range[1] - 1, pos_range[1] + 2)):
-            if pos in data[1]:
-                witnesses.append((number, (pos_range[0][0] + 1, pos_range[0][1] - 2), pos_range[1], pos))
-    return witnesses
-
-
-def print_invalid_witnesses(witnesses):
-    for witness in witnesses:
-        if witness[0] == 814:
-            print(witness)
+def sum_numbers(nums: Iterable[Number]) -> int:
+    return sum(number.value for number in nums)
 
 
 if __name__ == '__main__':
     with open("input.txt") as f:
-        data = parse_grid(f)
-    # print(Counter(part_numbers(data)))
-    print_invalid_witnesses(part_witnesses(data))
-    nums = part_numbers(data)
-    print(sum(nums))
-    print(nums)
+        print(sum_numbers(part_numbers(f)))
