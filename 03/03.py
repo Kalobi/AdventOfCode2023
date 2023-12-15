@@ -71,6 +71,17 @@ def sum_numbers(nums: Iterable[Number]) -> int:
     return sum(number.value for number in nums)
 
 
+def gear_ratios(raw_grid: Iterable[str]) -> list[int]:
+    grid = parse_grid(raw_grid, re_gear)
+    ratios = []
+    for potential_gear in grid.symbols:
+        numbers = [number for number in grid.numbers if is_adjacent(number, potential_gear)]
+        if len(numbers) == 2:
+            ratios.append(numbers[0].value * numbers[1].value)
+    return ratios
+
+
 if __name__ == '__main__':
     with open("input.txt") as f:
-        print(sum_numbers(part_numbers(f)))
+        # print(sum_numbers(part_numbers(f)))
+        print(sum(gear_ratios(f)))
